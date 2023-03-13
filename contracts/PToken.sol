@@ -165,9 +165,9 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
     function _tradeCore(uint256 nftId, address sender) private {
         NftInfo memory nftInfo = getNftInfo(nftId);
         if(nftInfo.action == INftController.Action.FREEDOM) {
-            _allRandID.remove(nftId);
+            require(_allRandID.remove(nftId), "nftId is not in the random list");
         } else {
-            require(nftInfo.endBlock < block.number,'STATUS ERR');  
+            require(nftInfo.endBlock < block.number,'STATUS ERR');
         }
         _delData(nftId, sender);
     }
