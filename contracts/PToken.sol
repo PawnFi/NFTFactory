@@ -205,6 +205,7 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
             uint256 nftId = nftIds[i];
             NftInfo memory nftInfo = getNftInfo(nftId);
             require(nftInfo.userAddr == msgSender, 'USER NOT ALLOW');//Must be lock initiator
+            require(nftInfo.startBlock < block.number, "prohibit same block operate");
             require(nftInfo.action == INftController.Action.STAKING && nftInfo.endBlock >= block.number, "Status error");
 
             _delData(nftId, msgSender);
