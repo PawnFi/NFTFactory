@@ -104,4 +104,14 @@ contract PTokenFactory is IPTokenFactory, OwnableUpgradeable {
         feeTo = newFeeTo;
     }
 
+    /**
+     * @notice Changes the proxy to use a new beacon.
+     * @param beaconProxy beacon proxy address
+     * @param newBeacon new beacon address
+     * @param data calldata
+     */
+    function setBeacon(address beaconProxy, address newBeacon, bytes memory data) external virtual onlyOwner {
+        BeaconProxy(payable(beaconProxy)).setBeacon(newBeacon, data);
+    }
+
 }

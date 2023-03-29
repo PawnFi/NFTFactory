@@ -289,6 +289,23 @@ contract NftSale is AccessControlUpgradeable, ERC721HolderUpgradeable, NftSaleSt
     }
 
     /**
+     * @notice Get the owner address of nft id
+     * @param nftAddr nft address
+     * @param nftId nft id
+     * @return address owner address
+     */
+    function nftOwner(address, address nftAddr, uint256 nftId) external view returns(address) {
+        uint256 infoIndex = saleIndex[nftAddr][nftId];
+        if(infoIndex < allInfo.length) {
+            SaleInfo memory saleInfo = allInfo[infoIndex];
+            if(saleInfo.nftAddr == nftAddr && saleInfo.nftId == nftId && saleInfo.lockEndBlock >= block.number) {
+                return saleInfo.userAddr;
+            }
+        }
+        return address(0);
+    }
+
+    /**
      * @notice Withdraw platform fee (Initial prepaid fee from liquidated NFT)
      * @param token ptoken address
      * @param amount Withdraw amount

@@ -21,6 +21,8 @@ contract BeaconProxy is Proxy {
      */
     bytes32 private constant _BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
 
+    bytes32 private constant _OWNER_SLOT = 0xa7b53796fd2d99cb1f5ae019b54f9e024446c3d12b483f733ccc62ed04eb126a;
+
     /**
      * @dev Initializes the proxy with `beacon`.
      *
@@ -34,8 +36,10 @@ contract BeaconProxy is Proxy {
      */
     constructor() payable {
         assert(_BEACON_SLOT == bytes32(uint256(keccak256("eip1967.proxy.beacon")) - 1));
+        assert(_OWNER_SLOT == bytes32(uint256(keccak256("eip1967.proxy.owner")) - 1));
         (address beacon, bytes memory data) = IPTokenFactory(msg.sender).parameters();
         _setBeacon(beacon, data);
+        _setOwner(msg.sender);
     }
 
     /**
@@ -46,6 +50,17 @@ contract BeaconProxy is Proxy {
         // solhint-disable-next-line no-inline-assembly
         assembly {
             beacon := sload(slot)
+        }
+    }
+
+    /**
+     * @dev Returns the current owner address.
+     */
+    function _owner() internal view virtual returns (address owner) {
+        bytes32 slot = _OWNER_SLOT;
+        // solhint-disable-next-line no-inline-assembly
+        assembly {
+            owner := sload(slot)
         }
     }
 
@@ -86,4 +101,19 @@ contract BeaconProxy is Proxy {
             Address.functionDelegateCall(_implementation(), data, "BeaconProxy: function call failed");
         }
     }
+
+    function _setOwner(address owner) internal virtual {
+        bytes32 slot = _OWNER_SLOT;
+
+        // solhint-disable-next-line no-inline-assembly
+        assembly {
+            sstore(slot, owner)
+        }
+    }
+
+    function setBeacon(address beacon, bytes memory data) external virtual {
+        address owner = _owner();
+        require(msg.sender == owner, "BeaconProxy: caller is not owner address");
+        _setBeacon(beacon, data);
+    } 
 }
