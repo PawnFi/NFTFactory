@@ -18,3 +18,7 @@ interface IPTokenFactory {
     /*** Admin Functions ***/
     function setFeeTo(address feeTo_) external;
 }
+
+interface IOwnable {
+    function owner() external view returns (address);
+}
