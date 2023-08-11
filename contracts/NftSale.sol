@@ -64,7 +64,7 @@ contract NftSale is AccessControlUpgradeable, ERC721HolderUpgradeable, NftSaleSt
      * @param blockCount Block numbers for lock-up
      * @param salePrice Sale price (0 when leverage)
      */
-    function create(address nftAddr, uint256 nftId, uint256 blockCount, uint256 salePrice) external virtual override {
+    function create(address nftAddr, uint256 nftId, uint256 blockCount, uint256 salePrice) external virtual override onlyEOA {
         _create(msg.sender, nftAddr, nftId, blockCount, salePrice);
     }
 
@@ -190,6 +190,7 @@ contract NftSale is AccessControlUpgradeable, ERC721HolderUpgradeable, NftSaleSt
      * @param nftId nftId
      */
     function buy(address nftAddr, uint256 nftId) external virtual override {
+        require(tx.origin == msg.sender || hasRole(DELEGATE_ROLE, msg.sender));
         uint256 infoIndex = saleIndex[nftAddr][nftId];
         require(infoIndex < allInfo.length, "index out of bounds");
 
@@ -231,10 +232,11 @@ contract NftSale is AccessControlUpgradeable, ERC721HolderUpgradeable, NftSaleSt
      * @param nftAddr nft contract address
      * @param nftId nftId
      */
-    function redeem(address nftAddr, uint256 nftId) external virtual override {
+    function redeem(address nftAddr, uint256 nftId) external virtual override onlyEOA {
         uint256 infoIndex = saleIndex[nftAddr][nftId];
         require(infoIndex < allInfo.length, "index out of bounds");
         SaleInfo memory saleInfo = allInfo[infoIndex];
+        require(saleInfo.startBlock < block.number, "prohibit same block operate");
         require(saleInfo.endBlock > 0, "SALE INFO NOT EXISTS"); //Not bought or redeemed
         require(saleInfo.lockEndBlock >= block.number, "LOCK TIMEOUT");
 
@@ -313,5 +315,10 @@ contract NftSale is AccessControlUpgradeable, ERC721HolderUpgradeable, NftSaleSt
     function withdrawFee(address token, uint256 amount) external {
         require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "caller isn't admin");
         IERC20Upgradeable(token).safeTransfer(feeTo, amount);
+    }
+
+    modifier onlyEOA() {
+        require(tx.origin == msg.sender, "Only EOA");
+        _;
     }
 }

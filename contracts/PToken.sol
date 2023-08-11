@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC721/utils/ERC721HolderUpgra
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721MetadataUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/IAccessControlUpgradeable.sol";
 import "./interfaces/IPTokenFactory.sol";
 import "./libraries/TransferHelper.sol";
 import "./PTokenStorage.sol";
@@ -78,8 +79,8 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
      * @param nftIds nft list
      * @return tokenAmount ptoken amount
      */
-    function deposit(uint256[] memory nftIds) external virtual override returns (uint256 tokenAmount) {
-        return deposit(nftIds, 0);
+    function deposit(uint256[] memory nftIds) external virtual override nonReentrant returns (uint256 tokenAmount) {
+        return _deposit(nftIds, 0);
     }
 
     /**
@@ -89,7 +90,12 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
      * @param blockNumber The block height at which the lock-up expires
      * @return tokenAmount ptoken amount
      */
-    function deposit(uint256[] memory nftIds, uint256 blockNumber) public virtual override nonReentrant returns (uint256 tokenAmount) {
+    function deposit(uint256[] memory nftIds, uint256 blockNumber) public virtual override nonReentrant onlyStakeRole returns (uint256 tokenAmount) {
+        require(blockNumber > 0);
+        return _deposit(nftIds, blockNumber);
+    }
+
+    function _deposit(uint256[] memory nftIds, uint256 blockNumber) internal returns (uint256 tokenAmount) {
         address msgSender = msg.sender;
         uint256 length = nftIds.length;
         require(length > 0, "SIZE ERR");
@@ -123,7 +129,7 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
      * @param nftIdCount NFT amount
      * @return nftIds nftId list
      */
-    function randomTrade(uint256 nftIdCount) external virtual override nonReentrant returns (uint256[] memory nftIds) {
+    function randomTrade(uint256 nftIdCount) public virtual override nonReentrant returns (uint256[] memory nftIds) {
         address msgSender = msg.sender;
         address nftAddr = nftAddress;
         require(nftIdCount > 0 && nftIdCount <= getRandNftCount(), 'NO ID');
@@ -148,7 +154,7 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
      * @notice ptoken swap specific NFT
      * @param nftIds nftId list
      */
-    function specificTrade(uint256[] memory nftIds) external virtual override nonReentrant {
+    function specificTrade(uint256[] memory nftIds) public virtual override nonReentrant {
         address msgSender = msg.sender;
         uint256 nftIdCount = nftIds.length;
         require(nftIdCount > 0, 'SIZE ERR');
@@ -157,12 +163,14 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
 
         for(uint i = 0; i < nftIdCount; i++) {
             uint256 nftId = nftIds[i];
+            NftInfo memory nftInfo = getNftInfo(nftId);
+            require(nftInfo.startBlock < block.number, "prohibit same block operate");
             _tradeCore(nftId, msgSender);
         }
         emit SpecificTrade(msgSender, nftIds.length, fee, nftIds);
     }
 
-    function _tradeCore(uint256 nftId, address sender) private {
+    function _tradeCore(uint256 nftId, address sender) internal {
         NftInfo memory nftInfo = getNftInfo(nftId);
         if(nftInfo.action == INftController.Action.FREEDOM) {
             require(_allRandID.remove(nftId), "nftId is not in the random list");
@@ -178,7 +186,7 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
      * @param fee Swap fee for one NFT
      * @param nftIdCount nftId amount
      */
-    function _collectFee(address sender, uint256 fee, uint256 nftIdCount) private returns (uint256) {
+    function _collectFee(address sender, uint256 fee, uint256 nftIdCount) internal returns (uint256) {
         uint256 tokenAmount = pieceCount.mul(nftIdCount);
         uint256 totalFee = fee.mul(nftIdCount);//Calculate the fees of NFTs
 
@@ -193,7 +201,7 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
      * @param nftIds nftId list
      * @return tokenAmount token amount
      */
-    function withdraw(uint256[] memory nftIds) external virtual override nonReentrant returns (uint256 tokenAmount) {
+    function withdraw(uint256[] memory nftIds) public virtual override nonReentrant onlyStakeRole returns (uint256 tokenAmount) {
         address msgSender = msg.sender;
         uint256 length = nftIds.length;
         require(length > 0, "SIZE ERR");
@@ -218,7 +226,7 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
      * @param nftId nftId
      * @param receipient Receiver
      */
-    function _delData(uint256 nftId, address receipient) private {
+    function _delData(uint256 nftId, address receipient) internal {
         delete _allInfo[nftId];
         TransferHelper.transferOutNonFungibleToken(IPTokenFactory(factory).nftTransferManager(), nftAddress, address(this), receipient, nftId);
     }
@@ -228,13 +236,15 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
      * @dev nft status from Staking to Free
      * @param nftIds nftId list
      */
-    function convert(uint256[] memory nftIds) external virtual override nonReentrant {
+    function convert(uint256[] memory nftIds) public virtual override nonReentrant onlyStakeRole {
         for(uint256 i = 0; i < nftIds.length; i++) {
             uint256 nftId = nftIds[i];
             NftInfo memory lockInfo = getNftInfo(nftId);
             require(lockInfo.userAddr == msg.sender, 'USER NOT ALLOW');//Must be lock initiator
             require(lockInfo.action == INftController.Action.STAKING, "Status error");
             lockInfo.action = INftController.Action.FREEDOM;
+            lockInfo.startBlock = block.number;
+            lockInfo.endBlock = 0;
             _allInfo[nftId] = lockInfo;
             _allRandID.add(nftId);
         }
@@ -273,5 +283,11 @@ contract PToken is ERC20Upgradeable, ERC721HolderUpgradeable, ReentrancyGuardUpg
      */
     function getNftController() public view virtual override returns (INftController) {
         return INftController(IPTokenFactory(factory).controller());
+    }
+
+    modifier onlyStakeRole() {
+        INftController nftController = getNftController();
+        require(IAccessControlUpgradeable(address(nftController)).hasRole(nftController.STAKER_ROLE(), msg.sender));
+        _;
     }
 }
