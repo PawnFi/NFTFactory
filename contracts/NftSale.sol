@@ -318,7 +318,7 @@ contract NftSale is AccessControlUpgradeable, ERC721HolderUpgradeable, NftSaleSt
     }
 
     modifier onlyEOA() {
-        require(tx.origin == msg.sender, "Only EOA");
+        require(tx.origin == msg.sender && address(msg.sender).code.length == 0, "Only EOA");
         _;
     }
 }
